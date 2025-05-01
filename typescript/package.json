@@ -1,0 +1,29 @@
+{
+  "name": "eni-cleanup",
+  "version": "1.0.0",
+  "description": "Pulumi program to identify and cleanup orphaned AWS ENIs",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest --testMatch='**/tests/**/*.spec.ts'",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"**/*.ts\""
+  },
+  "dependencies": {
+    "@pulumi/aws": "^5.0.0",
+    "@pulumi/awsx": "^1.0.0",
+    "@pulumi/pulumi": "^3.0.0",
+    "@pulumi/command": "^0.7.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "@types/node": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "prettier": "^3.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^5.0.0"
+  }
+}

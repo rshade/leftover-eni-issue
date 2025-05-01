@@ -1,0 +1,8 @@
+config:
+  aws:region: us-east-1
+  eni-cleanup-python:regions:
+    - us-east-1
+    - us-west-2
+  eni-cleanup-python:dry_run: true
+  eni-cleanup-python:skip_confirmation: false
+  eni-cleanup-python:older_than_days: 7

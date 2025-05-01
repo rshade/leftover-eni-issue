@@ -1,0 +1,3 @@
+name: eni-cleanup-python
+runtime: python
+description: Pulumi program to identify and cleanup orphaned AWS ENIs
