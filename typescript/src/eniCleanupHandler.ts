@@ -131,13 +131,61 @@ for region in ${regions.map(r => `"${r}"`).join(' ')}; do
             fi
         fi
         
-        # Delete the ENI
+        # Try to delete the ENI
         echo "Deleting ENI $ENI_ID"
         if [ "$dryRunFlag" == "" ]; then
-            aws ec2 delete-network-interface \\
+            if aws ec2 delete-network-interface \\
                 --region $region \\
-                --network-interface-id $ENI_ID
-            echo "Successfully deleted ENI $ENI_ID in $region"
+                --network-interface-id $ENI_ID; then
+                echo "Successfully deleted ENI $ENI_ID in $region"
+            else
+                echo "Failed to delete ENI $ENI_ID. Attempting fallback methods..."
+                
+                # Fallback 1: Check for security group associations and try to remove them
+                echo "Checking security group associations for ENI $ENI_ID"
+                GROUPS=$(echo $ENI_DETAILS | jq -r '.Groups[].GroupId // empty')
+                
+                if [ ! -z "$GROUPS" ]; then
+                    echo "Found security group associations for ENI $ENI_ID. Attempting to modify network interface attribute."
+                    # Create a temporary file for groups (empty array)
+                    TEMP_FILE=$(mktemp)
+                    echo '[]' > $TEMP_FILE
+                    
+                    # Try to remove all security groups
+                    if aws ec2 modify-network-interface-attribute \\
+                        --region $region \\
+                        --network-interface-id $ENI_ID \\
+                        --groups file://$TEMP_FILE; then
+                        echo "Successfully removed security group associations from ENI $ENI_ID"
+                        
+                        # Try deleting again
+                        if aws ec2 delete-network-interface \\
+                            --region $region \\
+                            --network-interface-id $ENI_ID; then
+                            echo "Successfully deleted ENI $ENI_ID after removing security groups"
+                        else
+                            echo "Still failed to delete ENI $ENI_ID after removing security groups"
+                        fi
+                    else
+                        echo "Failed to remove security group associations from ENI $ENI_ID"
+                    fi
+                    
+                    # Clean up temp file
+                    rm $TEMP_FILE
+                fi
+                
+                # Fallback 2: If deletion still fails, try to tag it for manual cleanup later
+                if aws ec2 describe-network-interfaces \\
+                    --region $region \\
+                    --network-interface-ids $ENI_ID > /dev/null 2>&1; then
+                    echo "ENI $ENI_ID still exists. Tagging it for manual cleanup."
+                    aws ec2 create-tags \\
+                        --region $region \\
+                        --resources $ENI_ID \\
+                        --tags Key=NeedsManualCleanup,Value=true Key=AttemptedCleanupTime,Value="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                    echo "Tagged ENI $ENI_ID for manual cleanup. Please review this ENI later."
+                fi
+            fi
         else
             echo "[DRY RUN] Would delete ENI $ENI_ID in $region"
         fi
@@ -218,7 +266,7 @@ for region in regions:
                 else:
                     print(f"[DRY RUN] Would detach ENI {eni_id} (attachment: {attachment_id})")
         
-        # Delete the ENI
+        # Try to delete the ENI
         print(f"Deleting ENI {eni_id}")
         if not dry_run:
             try:
@@ -228,6 +276,63 @@ for region in regions:
                 print(f"Successfully deleted ENI {eni_id} in {region}")
             except Exception as e:
                 print(f"Error deleting ENI {eni_id}: {e}")
+                print(f"Failed to delete ENI {eni_id}. Attempting fallback methods...")
+                
+                # Fallback 1: Check for security group associations and try to remove them
+                try:
+                    # Get current ENI details
+                    response = ec2_client.describe_network_interfaces(
+                        NetworkInterfaceIds=[eni_id]
+                    )
+                    if response.get('NetworkInterfaces') and len(response['NetworkInterfaces']) > 0:
+                        current_eni = response['NetworkInterfaces'][0]
+                        
+                        # Check if it has security groups
+                        if 'Groups' in current_eni and current_eni['Groups']:
+                            print(f"Found security group associations for ENI {eni_id}. Attempting to modify them.")
+                            
+                            # Try to remove all security groups
+                            try:
+                                ec2_client.modify_network_interface_attribute(
+                                    NetworkInterfaceId=eni_id,
+                                    Groups=[]
+                                )
+                                print(f"Successfully removed security group associations from ENI {eni_id}")
+                                
+                                # Try deleting again
+                                try:
+                                    ec2_client.delete_network_interface(
+                                        NetworkInterfaceId=eni_id
+                                    )
+                                    print(f"Successfully deleted ENI {eni_id} after removing security groups")
+                                except Exception as e2:
+                                    print(f"Still failed to delete ENI {eni_id} after removing security groups: {e2}")
+                            except Exception as e3:
+                                print(f"Failed to remove security group associations from ENI {eni_id}: {e3}")
+                        
+                        # Fallback 2: If deletion still fails, try to tag it for manual cleanup later
+                        try:
+                            # Check if ENI still exists
+                            ec2_client.describe_network_interfaces(
+                                NetworkInterfaceIds=[eni_id]
+                            )
+                            # If we get here, ENI still exists, so tag it
+                            print(f"ENI {eni_id} still exists. Tagging it for manual cleanup.")
+                            import datetime
+                            current_time = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+                            ec2_client.create_tags(
+                                Resources=[eni_id],
+                                Tags=[
+                                    {'Key': 'NeedsManualCleanup', 'Value': 'true'},
+                                    {'Key': 'AttemptedCleanupTime', 'Value': current_time}
+                                ]
+                            )
+                            print(f"Tagged ENI {eni_id} for manual cleanup. Please review this ENI later.")
+                        except Exception as e4:
+                            # Either ENI doesn't exist anymore or tagging failed
+                            pass
+                except Exception as e5:
+                    print(f"Error during fallback cleanup of ENI {eni_id}: {e5}")
         else:
             print(f"[DRY RUN] Would delete ENI {eni_id} in {region}")
 

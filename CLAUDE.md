@@ -20,6 +20,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Comments**: Document complex infrastructure relationships and decision rationale
 - **Secrets**: Never hardcode credentials, use Pulumi config with `--secret` flag
 - **ENI Cleanup**: Use destroy-time hooks with pulumi-command to clean up orphaned ENIs before resource destruction
+- **Fallback Mechanisms**: Implement multiple fallback strategies when ENI deletion fails:
+  1. Security group disassociation: Remove security group associations and retry deletion
+  2. Tagging for manual review: Tag ENIs that couldn't be automatically cleaned up
+  3. Comprehensive error handling with detailed logs
+- **Multi-language Implementation**: When making changes, always implement in all three languages:
+  1. TypeScript
+  2. Python
+  3. Go
 
 ## Project Todo List (COMPLETED)
 1. ✅ Set up basic Pulumi TypeScript project structure
@@ -31,3 +39,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 7. ✅ Create pre-destroy hook using pulumi-command
 8. ✅ Add automated testing for the cleanup process
 9. ✅ Add cross-language documentation and implementation details
+10. ✅ Implement fallback mechanisms when ENI deletion fails
+    - ✅ Security group disassociation fallback
+    - ✅ Tagging for manual cleanup
+    - ✅ Comprehensive error handling and reporting
+11. ✅ Update documentation with fallback mechanisms details

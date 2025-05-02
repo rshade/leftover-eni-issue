@@ -154,10 +154,55 @@ for region in %s; do
         # Delete the ENI
         echo "Deleting ENI $ENI_ID"
         if [ "%s" == "" ]; then
-            aws ec2 delete-network-interface \
+            # Try to delete the ENI
+            if ! aws ec2 delete-network-interface \
                 --region $region \
-                --network-interface-id $ENI_ID
-            echo "Successfully deleted ENI $ENI_ID in $region"
+                --network-interface-id $ENI_ID 2>/dev/null; then
+                
+                echo "Initial deletion failed for ENI $ENI_ID. Trying fallback strategies..."
+                
+                # Fallback 1: Try removing all security group associations
+                echo "Fallback 1: Removing security group associations for ENI $ENI_ID"
+                if aws ec2 modify-network-interface-attribute \
+                    --region $region \
+                    --network-interface-id $ENI_ID \
+                    --groups "[]" 2>/dev/null; then
+                    
+                    echo "Security groups disassociated. Retrying deletion..."
+                    sleep 2
+                    
+                    # Try deleting again
+                    if aws ec2 delete-network-interface \
+                        --region $region \
+                        --network-interface-id $ENI_ID 2>/dev/null; then
+                        echo "Successfully deleted ENI $ENI_ID after security group disassociation"
+                    else
+                        echo "Deletion still failed after removing security groups"
+                        
+                        # Fallback 2: Tag for manual cleanup
+                        echo "Fallback 2: Tagging ENI $ENI_ID for manual cleanup"
+                        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                        aws ec2 create-tags \
+                            --region $region \
+                            --resources $ENI_ID \
+                            --tags "Key=NeedsManualCleanup,Value=true" "Key=AttemptedCleanupTime,Value=$TIMESTAMP"
+                        echo "Tagged ENI $ENI_ID for manual cleanup"
+                    fi
+                else
+                    echo "Failed to modify security groups for ENI $ENI_ID"
+                    
+                    # Fallback 2: Tag for manual cleanup
+                    echo "Fallback 2: Tagging ENI $ENI_ID for manual cleanup"
+                    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                    aws ec2 create-tags \
+                        --region $region \
+                        --resources $ENI_ID \
+                        --tags "Key=NeedsManualCleanup,Value=true" "Key=AttemptedCleanupTime,Value=$TIMESTAMP"
+                    echo "Tagged ENI $ENI_ID for manual cleanup"
+                fi
+            else
+                echo "Successfully deleted ENI $ENI_ID in $region"
+            fi
         else
             echo "[DRY RUN] Would delete ENI $ENI_ID in $region"
         fi
@@ -244,12 +289,65 @@ for region in regions:
         print(f"Deleting ENI {eni_id}")
         if not dry_run:
             try:
+                # Try to delete the ENI
                 ec2_client.delete_network_interface(
                     NetworkInterfaceId=eni_id
                 )
                 print(f"Successfully deleted ENI {eni_id} in {region}")
-            except Exception as e:
-                print(f"Error deleting ENI {eni_id}: {e}")
+            except Exception as initial_error:
+                print(f"Initial deletion failed for ENI {eni_id}: {initial_error}")
+                print(f"Trying fallback strategies...")
+                
+                try:
+                    # Fallback 1: Try removing all security group associations
+                    print(f"Fallback 1: Removing security group associations for ENI {eni_id}")
+                    ec2_client.modify_network_interface_attribute(
+                        NetworkInterfaceId=eni_id,
+                        Groups=[]
+                    )
+                    
+                    print(f"Security groups disassociated. Retrying deletion...")
+                    time.sleep(2)
+                    
+                    # Try deleting again
+                    try:
+                        ec2_client.delete_network_interface(
+                            NetworkInterfaceId=eni_id
+                        )
+                        print(f"Successfully deleted ENI {eni_id} after security group disassociation")
+                    except Exception as second_error:
+                        print(f"Deletion still failed after removing security groups: {second_error}")
+                        
+                        # Fallback 2: Tag for manual cleanup
+                        print(f"Fallback 2: Tagging ENI {eni_id} for manual cleanup")
+                        timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                        ec2_client.create_tags(
+                            Resources=[eni_id],
+                            Tags=[
+                                {'Key': 'NeedsManualCleanup', 'Value': 'true'},
+                                {'Key': 'AttemptedCleanupTime', 'Value': timestamp},
+                                {'Key': 'DeletionError', 'Value': str(second_error)[:255]}
+                            ]
+                        )
+                        print(f"Tagged ENI {eni_id} for manual cleanup")
+                except Exception as fallback_error:
+                    print(f"Failed to apply fallback strategies: {fallback_error}")
+                    
+                    # Still try to tag for manual cleanup as last resort
+                    try:
+                        print(f"Tagging ENI {eni_id} for manual cleanup as last resort")
+                        timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                        ec2_client.create_tags(
+                            Resources=[eni_id],
+                            Tags=[
+                                {'Key': 'NeedsManualCleanup', 'Value': 'true'},
+                                {'Key': 'AttemptedCleanupTime', 'Value': timestamp},
+                                {'Key': 'DeletionError', 'Value': str(initial_error)[:255]}
+                            ]
+                        )
+                        print(f"Tagged ENI {eni_id} for manual cleanup")
+                    except Exception as tag_error:
+                        print(f"Failed to tag ENI {eni_id} for manual cleanup: {tag_error}")
         else:
             print(f"[DRY RUN] Would delete ENI {eni_id} in {region}")
 
