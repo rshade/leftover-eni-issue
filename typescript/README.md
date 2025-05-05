@@ -74,6 +74,20 @@ attachENICleanupHandler(eksCluster, {
    - Log the cleanup process
 3. The cleanup happens BEFORE the resource is destroyed, preventing dependency failures
 
+### Fallback Mechanisms
+
+If ENI deletion fails, the handler employs several fallback strategies:
+
+1. **Security Group Disassociation**: If the ENI has security group associations preventing deletion, the handler attempts to remove all security group associations first and then tries deletion again.
+
+2. **Tagging for Manual Review**: If deletion still fails after all automated attempts, the ENI is tagged with:
+   - `NeedsManualCleanup: true`
+   - `AttemptedCleanupTime: <timestamp>`
+   
+   This allows for later identification and manual cleanup of problematic ENIs.
+
+3. **Comprehensive Error Handling**: All cleanup operations include detailed error reporting to help identify why an ENI couldn't be deleted.
+
 ## Configuration
 
 The following configuration options are available:

@@ -97,7 +97,17 @@ The cleanup script performs these operations:
    aws ec2 delete-network-interface --network-interface-id $ENI_ID
    ```
 
-5. **Comprehensive Logging**: Records each step for debugging and verification
+5. **Fallback Strategies**: If deletion fails, implements a series of fallback mechanisms:
+   - **Security Group Disassociation**: Attempts to remove security group associations
+     ```bash
+     aws ec2 modify-network-interface-attribute --network-interface-id $ENI_ID --groups "[]"
+     ```
+   - **Tagging for Manual Review**: Marks problematic ENIs for later cleanup
+     ```bash
+     aws ec2 create-tags --resources $ENI_ID --tags Key=NeedsManualCleanup,Value=true
+     ```
+
+6. **Comprehensive Logging**: Records each step for debugging and verification
 
 ## Usage Patterns
 
