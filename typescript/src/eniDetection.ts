@@ -59,7 +59,7 @@ export async function detectOrphanedENIs(
                         availabilityZone: eni.availabilityZone,
                         description: eni.description,
                         attachmentState: eni.attachment?.status, 
-                        createdTime: "", // Not available from the API
+                        createdTime: PLACEHOLDER_CREATED_TIME, // Placeholder value
                         tags: eni.tags || {},
                     });
                 }

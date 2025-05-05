@@ -171,7 +171,7 @@ for region in ${regions.map(r => `"${r}"`).join(' ')}; do
                     fi
                     
                     # Clean up temp file
-                    rm $TEMP_FILE
+                    rm $TEMP_FILE || echo "Failed to remove temporary file $TEMP_FILE"
                 fi
                 
                 # Fallback 2: If deletion still fails, try to tag it for manual cleanup later

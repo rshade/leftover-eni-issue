@@ -106,14 +106,14 @@ export async function cleanupENIs(
     });
     
     // Log the number of ENIs to be processed
-    pulumi.log.info(`Processing ${filteredEnis.length} ENIs (${result.skippedCount} skipped)`);
+    pulumi.log.info(`Processing ${filteredEnis.length} ENIs (${result.skippedCount} skipped, ${result.dryRunCount} dry-run)`); // Updated log message
     
     // If dry run, log what would be cleaned up but don't actually do it
     if (dryRun) {
         filteredEnis.forEach(eni => {
             pulumi.log.info(`[DRY RUN] Would clean up ENI ${eni.id} in ${eni.region}`);
         });
-        result.skippedCount += filteredEnis.length;
+        result.dryRunCount += filteredEnis.length; // Increment dryRunCount instead of skippedCount
         return result;
     }
     
@@ -195,7 +195,10 @@ export function createPreDestroyCleanupHook(
     const logLevel = options.logLevel || 'info';
     
     // Generate a unique name for the hook
-    const resourceName = parentResource.urn.apply(urn => urn.split('::')[2] || 'unknown');
+    const resourceName = parentResource.urn.apply(urn => {
+        const match = urn.match(/[^:]+::[^:]+::([^:]+)/);
+        return match ? match[1] : 'unknown';
+    });
     const hookName = pulumi.interpolate`${resourceName}-eni-cleanup-hook`;
     
     // Create a script that will run as part of resource destruction
