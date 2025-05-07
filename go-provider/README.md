@@ -75,7 +75,7 @@ ctx.Export("cleanupSuccessCount", cleanup.SuccessCount)
 
 The provider supports the following configuration options:
 
- < /dev/null |  Option | Description | Type | Required |
+| Option | Description | Type | Required |
 |--------|-------------|------|----------|
 | `regions` | List of AWS regions to scan for ENIs | `[]string` | Yes |
 | `securityGroupId` | Target security group ID to disassociate from ENIs | `*string` | No |
